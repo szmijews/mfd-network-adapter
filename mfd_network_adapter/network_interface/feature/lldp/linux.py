@@ -6,6 +6,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from mfd_common_libs import add_logging_level, log_levels
+from mfd_kernel_namespace import add_namespace_call_command
 from mfd_ethtool.base import Ethtool
 from mfd_const import Speed
 from mfd_network_adapter.network_interface.feature.utils.base import BaseFeatureUtils
@@ -72,3 +73,34 @@ class LinuxLLDP(BaseFeatureLLDP):
             return strtobool(flag_status)
         elif BaseFeatureUtils.is_speed_eq(self, Speed.G40):
             return not strtobool(flag_status)
+
+    def set_transmit_lldp_on_interface(self, enabled: State) -> None:
+        """
+        Set transmit LLDP on interface.
+
+        :param enabled: enable/disable setting
+        """
+        enable = "1" if enabled is State.ENABLED else "0"
+        cmd = add_namespace_call_command(
+            f"echo {enable} > /sys/class/net/{self._interface().name}/device/transmit_lldp",
+            namespace=self._interface().namespace,
+        )
+        self._connection.execute_command(cmd, shell=True, custom_exception=LLDPFeatureException)
+
+    def get_transmit_lldp_status(self) -> State:
+        """
+        Get transmit LLDP status on interface.
+
+        :return: State.ENABLED if transmit LLDP is on else State.DISABLED
+        """
+        cmd = add_namespace_call_command(
+            f"cat /sys/class/net/{self._interface().name}/device/transmit_lldp",
+            namespace=self._interface().namespace,
+        )
+        output = self._connection.execute_command(cmd, custom_exception=LLDPFeatureException)
+        status = output.stdout.strip()
+        if status == "1":
+            return State.ENABLED
+        if status == "0":
+            return State.DISABLED
+        raise LLDPFeatureException(f"Unexpected transmit_lldp status for {self._interface().name}: {status!r}")

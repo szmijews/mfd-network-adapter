@@ -129,3 +129,47 @@ class TestLinux:
         )
         with pytest.raises(Exception, match="'EthtoolShowPrivFlags' object has no attribute 'fw_lldp_agent'"):
             lldp_obj.is_fwlldp_enabled()
+
+    def test_sets_transmit_lldp_on_interface_when_enabled(self, lldp_obj):
+        lldp_obj.set_transmit_lldp_on_interface(State.ENABLED)
+
+        lldp_obj._connection.execute_command.assert_called_with(
+            f"echo 1 > /sys/class/net/{lldp_obj._interface().name}/device/transmit_lldp",
+            shell=True,
+            custom_exception=LLDPFeatureException,
+        )
+
+    def test_sets_transmit_lldp_off_interface_when_disabled(self, lldp_obj):
+        lldp_obj.set_transmit_lldp_on_interface(State.DISABLED)
+
+        lldp_obj._connection.execute_command.assert_called_with(
+            f"echo 0 > /sys/class/net/{lldp_obj._interface().name}/device/transmit_lldp",
+            shell=True,
+            custom_exception=LLDPFeatureException,
+        )
+
+    def test_returns_enabled_state_for_transmit_lldp_status_one(self, lldp_obj):
+        lldp_obj._connection.execute_command.return_value = ConnectionCompletedProcess(
+            args="", stdout="1", return_code=0, stderr=""
+        )
+
+        assert lldp_obj.get_transmit_lldp_status() is State.ENABLED
+        lldp_obj._connection.execute_command.assert_called_with(
+            f"cat /sys/class/net/{lldp_obj._interface().name}/device/transmit_lldp",
+            custom_exception=LLDPFeatureException,
+        )
+
+    def test_returns_disabled_state_for_transmit_lldp_status_zero_with_whitespace(self, lldp_obj):
+        lldp_obj._connection.execute_command.return_value = ConnectionCompletedProcess(
+            args="", stdout=" \n0\t", return_code=0, stderr=""
+        )
+
+        assert lldp_obj.get_transmit_lldp_status() is State.DISABLED
+
+    def test_raises_lldp_feature_exception_for_non_numeric_transmit_lldp_status(self, lldp_obj):
+        lldp_obj._connection.execute_command.return_value = ConnectionCompletedProcess(
+            args="", stdout="enabled", return_code=0, stderr=""
+        )
+
+        with pytest.raises(LLDPFeatureException):
+            lldp_obj.get_transmit_lldp_status()
